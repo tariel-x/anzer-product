@@ -14,12 +14,21 @@ func die(err error) {
 	}
 }
 
-func main() {
-	cfg, err := config()
-	die(err)
-	log.Printf("Config: %+v", cfg)
+var (
+	Rmq      string
+	In1      string
+	In2      string
+	Out      string
+	Exchange string
+	Type1    string
+	Type2    string
+)
 
-	conn, err := amqp.Dial(cfg.Rmq)
+func main() {
+	err := config()
+	die(err)
+
+	conn, err := amqp.Dial(Rmq)
 	die(err)
 	defer conn.Close()
 
@@ -28,18 +37,18 @@ func main() {
 	defer ch.Close()
 
 	err = ch.ExchangeDeclare(
-		cfg.Exchange, // name
-		"direct",     // type
-		true,         // durable
-		false,        // auto-deleted
-		false,        // internal
-		false,        // no-wait
-		nil,          // arguments
+		Exchange, // name
+		"direct", // type
+		true,     // durable
+		false,    // auto-deleted
+		false,    // internal
+		false,    // no-wait
+		nil,      // arguments
 	)
 	die(err)
 
-	msgs1, err := registerInput(cfg.In1, ch, cfg)
-	msgs2, err := registerInput(cfg.In2, ch, cfg)
+	msgs1, err := registerInput(In1, ch)
+	msgs2, err := registerInput(In2, ch)
 	die(err)
 
 	forever := make(chan bool)
@@ -48,10 +57,9 @@ func main() {
 		for {
 			select {
 			case in := <-msgs1:
-				log.Printf("In1: %s", in.Body)
-
+				handleInput1(in, ch)
 			case in := <-msgs2:
-				log.Printf("In2: %s", in.Body)
+				handleInput2(in, ch)
 			}
 		}
 	}()
@@ -60,7 +68,7 @@ func main() {
 	<-forever
 }
 
-func registerInput(rk string, ch *amqp.Channel, cfg Cfg) (<-chan amqp.Delivery, error) {
+func registerInput(rk string, ch *amqp.Channel) (<-chan amqp.Delivery, error) {
 	q, err := ch.QueueDeclare(
 		rk,    // name
 		false, // durable
@@ -73,11 +81,11 @@ func registerInput(rk string, ch *amqp.Channel, cfg Cfg) (<-chan amqp.Delivery, 
 		return nil, fmt.Errorf("Failed to declare a queue: %q", err)
 	}
 
-	log.Printf("Binding queue %s to exchange %s with routing key %s", q.Name, cfg.Exchange, q.Name)
+	log.Printf("Binding queue %s to exchange %s with routing key %s", q.Name, Exchange, q.Name)
 	err = ch.QueueBind(
-		q.Name,       // queue name
-		q.Name,       // routing key
-		cfg.Exchange, // exchange
+		q.Name,   // queue name
+		q.Name,   // routing key
+		Exchange, // exchange
 		false,
 		nil)
 	if err != nil {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 
 	"github.com/streadway/amqp"
 )
@@ -23,42 +24,49 @@ var (
 	storage = products{}
 )
 
-func handleInput1(m amqp.Delivery) {
+func handleInput1(m amqp.Delivery, ch *amqp.Channel) {
 	tmpID, ok := m.Headers[pidHeader]
 	if !ok {
 		return
 	}
-	id := tmpID.(pid)
+	id := pid(tmpID.(string))
 	if _, ok := storage[id]; !ok {
 		storage[id] = product{}
 	}
 
+	log.Printf("Add first part to pid %q", id)
 	product := storage[id]
 	product.m1 = json.RawMessage(m.Body)
+	storage[id] = product
+	log.Printf("Current product is %+v", storage[id])
 
 	data := makeProduct(id)
 	if data != nil {
-		push(data, id, "")
+		push(data, id, ch)
 		clear(id)
 	}
 }
 
-func handleInput2(m amqp.Delivery) {
-	id, ok := m.Headers[pidHeader]
+func handleInput2(m amqp.Delivery, ch *amqp.Channel) {
+	tmpID, ok := m.Headers[pidHeader]
 	if !ok {
 		return
 	}
-	if _, ok := storage[id.(pid)]; !ok {
-		storage[id.(pid)] = product{}
+	id := pid(tmpID.(string))
+	if _, ok := storage[id]; !ok {
+		storage[id] = product{}
 	}
 
-	product := storage[id.(pid)]
+	log.Printf("Add second part to pid %q", id)
+	product := storage[id]
 	product.m2 = json.RawMessage(m.Body)
+	storage[id] = product
+	log.Printf("Current product is %+v", storage[id])
 
-	data := makeProduct(id.(pid))
+	data := makeProduct(id)
 	if data != nil {
-		push(data)
-		clear(id.(pid))
+		push(data, id, ch)
+		clear(id)
 	}
 }
 
@@ -72,11 +80,14 @@ func makeProduct(id pid) json.RawMessage {
 	}
 
 	productData := map[string]json.RawMessage{
-		"m1": product.m1,
-		"m2": product.m2,
+		Type1: product.m1,
+		Type2: product.m2,
 	}
 
-	data, _ := json.Marshal(productData)
+	data, err := json.Marshal(productData)
+	if err != nil {
+		log.Printf("Error marshalling product data: %q", err)
+	}
 	return data
 }
 
@@ -87,4 +98,20 @@ func clear(id pid) {
 	delete(storage, id)
 }
 
-func push(data json.RawMessage, id pid, rk string) {}
+func push(data json.RawMessage, id pid, ch *amqp.Channel) {
+	log.Printf("Sending product pid %q message further to %q", id, Out)
+	err := ch.Publish(
+		Exchange, // exchange
+		Out,      // routing key
+		false,    // mandatory
+		false,    // immediate
+		amqp.Publishing{
+			Headers: amqp.Table{
+				pidHeader: string(id),
+			},
+			Body: []byte(data),
+		})
+	if err != nil {
+		log.Printf("Error while sending message further: %q", err)
+	}
+}
