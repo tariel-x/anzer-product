@@ -20,11 +20,11 @@ func main() {
 	log.Printf("Config: %+v", cfg)
 
 	conn, err := amqp.Dial(cfg.Rmq)
-	die(fmt.Errorf("Failed to connect to RabbitMQ: %q", err))
+	die(err)
 	defer conn.Close()
 
 	ch, err := conn.Channel()
-	die(fmt.Errorf("Failed to open a channel: %q", err))
+	die(err)
 	defer ch.Close()
 
 	err = ch.ExchangeDeclare(
@@ -36,7 +36,7 @@ func main() {
 		false,        // no-wait
 		nil,          // arguments
 	)
-	die(fmt.Errorf("Failed to declare an exchange: %q", err))
+	die(err)
 
 	msgs1, err := registerInput(cfg.In1, ch, cfg)
 	msgs2, err := registerInput(cfg.In2, ch, cfg)
@@ -56,7 +56,7 @@ func main() {
 		}
 	}()
 
-	log.Printf(" [*] Waiting for logs. To exit press CTRL+C")
+	log.Printf("amqp.Delivery [*] Waiting for logs. To exit press CTRL+C")
 	<-forever
 }
 
