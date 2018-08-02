@@ -8,8 +8,8 @@ import (
 )
 
 type product struct {
-	m1 json.RawMessage
-	m2 json.RawMessage
+	m1 interface{}
+	m2 interface{}
 }
 
 type pid string
@@ -36,7 +36,11 @@ func handleInput1(m amqp.Delivery, ch *amqp.Channel) {
 
 	log.Printf("Add first part to pid %q", id)
 	product := storage[id]
-	product.m1 = json.RawMessage(m.Body)
+	err := json.Unmarshal(m.Body, &product.m1)
+	if err != nil {
+		log.Printf("Error unmarshalling data %q: %q", m.Body, err)
+		return
+	}
 	storage[id] = product
 	log.Printf("Current product is %+v", storage[id])
 
@@ -59,7 +63,11 @@ func handleInput2(m amqp.Delivery, ch *amqp.Channel) {
 
 	log.Printf("Add second part to pid %q", id)
 	product := storage[id]
-	product.m2 = json.RawMessage(m.Body)
+	err := json.Unmarshal(m.Body, &product.m2)
+	if err != nil {
+		log.Printf("Error unmarshalling data %q: %q", m.Body, err)
+		return
+	}
 	storage[id] = product
 	log.Printf("Current product is %+v", storage[id])
 
@@ -79,7 +87,7 @@ func makeProduct(id pid) json.RawMessage {
 		return nil
 	}
 
-	productData := map[string]json.RawMessage{
+	productData := map[string]interface{}{
 		Type1: product.m1,
 		Type2: product.m2,
 	}
