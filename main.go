@@ -39,7 +39,7 @@ func main() {
 	err = ch.ExchangeDeclare(
 		Exchange, // name
 		"direct", // type
-		true,     // durable
+		false,    // durable
 		false,    // auto-deleted
 		false,    // internal
 		false,    // no-wait
